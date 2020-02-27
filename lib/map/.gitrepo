@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/rxi/map
+	branch = master
+	commit = d6c355fcfb35e5bf71905c0c28ccee34694b4a95
+	parent = 990d82f40b8301305469f96d6486634c0066596c
+	method = merge
+	cmdver = 0.4.0
