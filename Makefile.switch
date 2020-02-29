@@ -36,9 +36,9 @@ APP_VERSION	:=	$(VERSION)
 #---------------------------------------------------------------------------------
 TARGET		:=	ftpd
 BUILD		:=	build.switch
-SOURCES		:=	source
+SOURCES		:=	source source/switch lib/map/src
 DATA		:=	data
-INCLUDES	:=	include
+INCLUDES	:=	include lib/map/src
 EXEFS_SRC	:=	exefs_src
 
 #---------------------------------------------------------------------------------

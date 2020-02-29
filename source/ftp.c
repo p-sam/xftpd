@@ -23,17 +23,12 @@
 #include <sys/statvfs.h>
 #include <time.h>
 #include <unistd.h>
-#ifdef _3DS
-#include <3ds.h>
-#define lstat stat
-#elif defined(__SWITCH__)
-#include <switch.h>
-#define lstat stat
-#else
+#if !defined(_3DS) && !defined(__SWITCH__)
 #include <stdbool.h>
 #define BIT(x) (1<<(x))
 #endif
 #include "console.h"
+#include "vfs.h"
 
 #define POLL_UNKNOWN    (~(POLLIN|POLLPRI|POLLOUT))
 
@@ -173,8 +168,8 @@ struct ftp_session_t
   size_t   cmd_buffersize;
   uint64_t filepos;                      /*! persistent file position between callbacks */
   uint64_t filesize;                     /*! persistent file size between callbacks */
-  FILE     *fp;                          /*! persistent open file pointer between callbacks */
-  DIR      *dp;                          /*! persistent open directory pointer between callbacks */
+  VfsFile  *fp;                          /*! persistent open file pointer between callbacks */
+  VfsDir   *dp;                          /*! persistent open directory pointer between callbacks */
 };
 
 /*! ftp command descriptor */
@@ -480,13 +475,9 @@ ftp_session_close_data(ftp_session_t *session)
 static void
 ftp_session_close_file(ftp_session_t *session)
 {
-  int rc;
-
   if(session->fp != NULL)
   {
-    rc = fclose(session->fp);
-    if(rc != 0)
-      console_print(RED "fclose: %d %s\n" RESET, errno, strerror(errno));
+    vfsFileClose(session->fp);
   }
 
   session->fp      = NULL;
@@ -503,10 +494,10 @@ static int
 ftp_session_open_file_read(ftp_session_t *session)
 {
   int         rc;
-  struct stat st;
+  VfsStat st;
 
   /* open file in read mode */
-  session->fp = fopen(session->buffer, "rb");
+  session->fp = vfsFileOpen(session->buffer, "rb");
   if(session->fp == NULL)
   {
     console_print(RED "fopen '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
@@ -515,14 +506,14 @@ ftp_session_open_file_read(ftp_session_t *session)
 
   /* it's okay if this fails */
   errno = 0;
-  rc = setvbuf(session->fp, session->file_buffer, _IOFBF, FILE_BUFFERSIZE);
+  rc = vfsFileSetBuffer(session->fp, session->file_buffer, FILE_BUFFERSIZE);
   if(rc != 0)
   {
     console_print(RED "setvbuf: %d %s\n" RESET, errno, strerror(errno));
   }
 
   /* get the file size */
-  rc = fstat(fileno(session->fp), &st);
+  rc = vfsFileStat(session->fp, &st);
   if(rc != 0)
   {
     console_print(RED "fstat '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
@@ -532,7 +523,7 @@ ftp_session_open_file_read(ftp_session_t *session)
 
   if(session->filepos != 0)
   {
-    rc = fseek(session->fp, session->filepos, SEEK_SET);
+    rc = vfsFileSeek(session->fp, session->filepos, SEEK_SET);
     if(rc != 0)
     {
       console_print(RED "fseek '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
@@ -555,7 +546,7 @@ ftp_session_read_file(ftp_session_t *session)
   ssize_t rc;
 
   /* read file at current position */
-  rc = fread(session->buffer, 1, sizeof(session->buffer), session->fp);
+  rc = vfsFileRead(session->buffer, 1, sizeof(session->buffer), session->fp);
   if(rc < 0)
   {
     console_print(RED "fread: %d %s\n" RESET, errno, strerror(errno));
@@ -590,7 +581,7 @@ ftp_session_open_file_write(ftp_session_t *session,
     mode = "r+b";
 
   /* open file in write mode */
-  session->fp = fopen(session->buffer, mode);
+  session->fp = vfsFileOpen(session->buffer, mode);
   if(session->fp == NULL)
   {
     console_print(RED "fopen '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
@@ -601,7 +592,7 @@ ftp_session_open_file_write(ftp_session_t *session,
 
   /* it's okay if this fails */
   errno = 0;
-  rc = setvbuf(session->fp, session->file_buffer, _IOFBF, FILE_BUFFERSIZE);
+  rc = vfsFileSetBuffer(session->fp, session->file_buffer, FILE_BUFFERSIZE);
   if(rc != 0)
   {
     console_print(RED "setvbuf: %d %s\n" RESET, errno, strerror(errno));
@@ -611,7 +602,7 @@ ftp_session_open_file_write(ftp_session_t *session,
   if(session->filepos != 0 && !append)
   {
     /* seek to the REST offset */
-    rc = fseek(session->fp, session->filepos, SEEK_SET);
+    rc = vfsFileSeek(session->fp, session->filepos, SEEK_SET);
     if(rc != 0)
     {
       console_print(RED "fseek '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
@@ -634,7 +625,7 @@ ftp_session_write_file(ftp_session_t *session)
   ssize_t rc;
 
   /* write to file at current position */
-  rc = fwrite(session->buffer + session->bufferpos,
+  rc = vfsFileWrite(session->buffer + session->bufferpos,
               1, session->buffersize - session->bufferpos,
               session->fp);
   if(rc < 0)
@@ -659,14 +650,10 @@ ftp_session_write_file(ftp_session_t *session)
 static void
 ftp_session_close_cwd(ftp_session_t *session)
 {
-  int rc;
-
   /* close open directory pointer */
   if(session->dp != NULL)
   {
-    rc = closedir(session->dp);
-    if(rc != 0)
-      console_print(RED "closedir: %d %s\n" RESET, errno, strerror(errno));
+    vfsDirClose(session->dp);
   }
   session->dp = NULL;
 }
@@ -681,7 +668,7 @@ static int
 ftp_session_open_cwd(ftp_session_t *session)
 {
   /* open current working directory */
-  session->dp = opendir(session->cwd);
+  session->dp = vfsDirOpen(session->cwd);
   if(session->dp == NULL)
   {
     console_print(RED "opendir '%s': %d %s\n" RESET, session->cwd, errno, strerror(errno));
@@ -729,7 +716,7 @@ ftp_session_set_state(ftp_session_t     *session,
  *  @returns errno
  */
 static int
-ftp_session_fill_dirent_type(ftp_session_t *session, const struct stat *st,
+ftp_session_fill_dirent_type(ftp_session_t *session, const VfsStat *st,
                              const char *path, size_t len, const char *type)
 {
   session->buffersize = 0;
@@ -859,7 +846,7 @@ ftp_session_fill_dirent_type(ftp_session_t *session, const struct stat *st,
     /* perms nlinks owner group size */
     session->buffersize +=
       sprintf(session->buffer + session->buffersize,
-              "%c%c%c%c%c%c%c%c%c%c %lu 3DS 3DS %lld ",
+              "%c%c%c%c%c%c%c%c%c%c %lu ftpd ftpd %lld ",
               S_ISREG(st->st_mode)  ? '-' :
               S_ISDIR(st->st_mode)  ? 'd' :
 #if !defined(_3DS) && !defined(__SWITCH__)
@@ -931,7 +918,7 @@ ftp_session_fill_dirent_type(ftp_session_t *session, const struct stat *st,
  *  @returns errno
  */
 static int
-ftp_session_fill_dirent(ftp_session_t *session, const struct stat *st,
+ftp_session_fill_dirent(ftp_session_t *session, const VfsStat *st,
                         const char *path, size_t len)
 {
   return ftp_session_fill_dirent_type(session, st, path, len, NULL);
@@ -1054,11 +1041,11 @@ static int
 ftp_session_fill_dirent_cdir(ftp_session_t *session, const char *path)
 {
   int         rc;
-  struct stat st;
+  VfsStat     st;
   char        *buffer;
   size_t      len;
 
-  rc = stat(path, &st);
+  rc = vfsStat(path, &st);
   /* double-check this was a directory */
   if(rc == 0 && !S_ISDIR(st.st_mode))
   {
@@ -1980,6 +1967,11 @@ ftp_init(void)
     .sb_efficiency = 8,
   };
 
+  if(!vfsInit()) {
+    console_print(RED "vfsInit failed\n" RESET);
+    return -1;
+  }
+
   Result ret = socketInitialize(&socketInitConfig);
   if(ret != 0)
   {
@@ -2096,6 +2088,7 @@ ftp_exit(void)
   console_print(CYAN "Waiting for socketExit()...\n" RESET);
 
   socketExit();
+  vfsDeinit();
 
 #endif
 }
@@ -2302,8 +2295,8 @@ list_transfer(ftp_session_t *session)
   ssize_t       rc;
   size_t        len;
   char          *buffer;
-  struct stat   st;
-  struct dirent *dent;
+  VfsStat     st;
+  VfsDirEntry *dent;
 
   /* check if we sent all available data */
   if(session->bufferpos == session->buffersize)
@@ -2324,7 +2317,7 @@ list_transfer(ftp_session_t *session)
     }
 
     /* get the next directory entry */
-    dent = readdir(session->dp);
+    dent = vfsDirRead(session->dp);
     if(dent == NULL)
     {
       /* we have exhausted the directory listing */
@@ -2421,7 +2414,7 @@ list_transfer(ftp_session_t *session)
       /* lstat the entry */
       if((rc = build_path(session, session->lwd, dent->d_name)) != 0)
         console_print(RED "build_path: %d %s\n" RESET, errno, strerror(errno));
-      else if((rc = lstat(session->buffer, &st)) != 0)
+      else if((rc = vfsStat(session->buffer, &st)) != 0)
         console_print(RED "stat '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
 
       if(rc != 0)
@@ -2687,7 +2680,7 @@ ftp_xfer_dir(ftp_session_t   *session,
 {
   ssize_t     rc;
   size_t      len;
-  struct stat st;
+  VfsStat st;
   char        *buffer;
 
   /* set up the transfer */
@@ -2711,11 +2704,11 @@ ftp_xfer_dir(ftp_session_t   *session,
     }
 
     /* check if this is a directory */
-    session->dp = opendir(session->buffer);
+    session->dp = vfsDirOpen(session->buffer);
     if(session->dp == NULL)
     {
       /* not a directory; check if it is a file */
-      rc = stat(session->buffer, &st);
+      rc = vfsStat(session->buffer, &st);
       if(rc != 0)
       {
         /* error getting stat */
@@ -2958,7 +2951,7 @@ FTP_DECLARE(CDUP)
  */
 FTP_DECLARE(CWD)
 {
-  struct stat st;
+  VfsStat st;
   int         rc;
 
   console_print(CYAN "%s %s\n" RESET, __func__, args ? args : "");
@@ -2981,7 +2974,7 @@ FTP_DECLARE(CWD)
   }
 
   /* get the path status */
-  rc = stat(session->buffer, &st);
+  rc = vfsStat(session->buffer, &st);
   if(rc != 0)
   {
     console_print(RED "stat '%s': %d %s\n" RESET, session->buffer, errno, strerror(errno));
@@ -3025,11 +3018,11 @@ FTP_DECLARE(DELE)
   }
 
   /* try to unlink the path */
-  rc = unlink(session->buffer);
+  rc = vfsUnlink(session->buffer);
   if(rc != 0)
   {
     /* error unlinking the file */
-    console_print(RED "unlink: %d %s\n" RESET, errno, strerror(errno));
+    console_print(RED "vfsUnlink: %d %s\n" RESET, errno, strerror(errno));
     ftp_send_response(session, 550, "failed to delete file\r\n");
     return;
   }
@@ -3120,7 +3113,7 @@ FTP_DECLARE(MDTM)
 #ifdef _3DS
   uint64_t    mtime;
 #else
-  struct stat st;
+  VfsStat st;
 #endif
   time_t      t_mtime;
   struct tm   *tm;
@@ -3145,7 +3138,7 @@ FTP_DECLARE(MDTM)
   }
   t_mtime = mtime;
 #else
-  rc = stat(session->buffer, &st);
+  rc = vfsStat(session->buffer, &st);
   if(rc != 0)
   {
     ftp_send_response(session, 550, "Error getting mtime\r\n");
@@ -3195,11 +3188,11 @@ FTP_DECLARE(MKD)
   }
 
   /* try to create the directory */
-  rc = mkdir(session->buffer, 0755);
+  rc = vfsDirCreate(session->buffer, 0755);
   if(rc != 0 && errno != EEXIST)
   {
     /* mkdir failure */
-    console_print(RED "mkdir: %d %s\n" RESET, errno, strerror(errno));
+    console_print(RED "vfsDirCreate: %d %s\n" RESET, errno, strerror(errno));
     ftp_send_response(session, 550, "failed to create directory\r\n");
     return;
   }
@@ -3232,7 +3225,7 @@ FTP_DECLARE(MLSD)
  */
 FTP_DECLARE(MLST)
 {
-  struct stat st;
+  VfsStat st;
   int         rc;
   char        *path;
   size_t      len;
@@ -3249,7 +3242,7 @@ FTP_DECLARE(MLST)
   }
 
   /* stat path */
-  rc = lstat(session->buffer, &st);
+  rc = vfsStat(session->buffer, &st);
   if(rc != 0)
   {
     ftp_send_response(session, 550, "%s\r\n", strerror(errno));
@@ -3811,7 +3804,7 @@ FTP_DECLARE(RMD)
   }
 
   /* remove the directory */
-  rc = rmdir(session->buffer);
+  rc = vfsDirRemove(session->buffer);
   if(rc != 0)
   {
     /* rmdir error */
@@ -3836,7 +3829,7 @@ FTP_DECLARE(RMD)
 FTP_DECLARE(RNFR)
 {
   int         rc;
-  struct stat st;
+  VfsStat st;
   console_print(CYAN "%s %s\n" RESET, __func__, args ? args : "");
 
   ftp_session_set_state(session, COMMAND_STATE, 0);
@@ -3849,7 +3842,7 @@ FTP_DECLARE(RNFR)
   }
 
   /* make sure the path exists */
-  rc = lstat(session->buffer, &st);
+  rc = vfsStat(session->buffer, &st);
   if(rc != 0)
   {
     /* error getting path status */
@@ -3902,7 +3895,7 @@ FTP_DECLARE(RNTO)
   }
 
   /* rename the file */
-  rc = rename(rnfr, session->buffer);
+  rc = vfsRename(rnfr, session->buffer);
   if(rc != 0)
   {
     /* rename failure */
@@ -3925,7 +3918,7 @@ FTP_DECLARE(RNTO)
 FTP_DECLARE(SIZE)
 {
   int         rc;
-  struct stat st;
+  VfsStat st;
 
   console_print(CYAN "%s %s\n" RESET, __func__, args ? args : "");
 
@@ -3938,7 +3931,7 @@ FTP_DECLARE(SIZE)
     return;
   }
 
-  rc = stat(session->buffer, &st);
+  rc = vfsStat(session->buffer, &st);
   if(rc != 0 || !S_ISREG(st.st_mode))
   {
     ftp_send_response(session, 550, "Could not get file size.\r\n");

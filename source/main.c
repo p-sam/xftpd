@@ -8,6 +8,7 @@
 #include <3ds.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
+#include "vfs.h"
 #endif
 #include "console.h"
 #include "ftp.h"
@@ -108,6 +109,9 @@ main(int  argc,
 #elif defined(__SWITCH__)
   /* initialize needed Switch services */
   nifmInitialize(NifmServiceType_User);
+  if(!vfsInit()) {
+    console_print(RED "vfsInit: failed\n" RESET);
+  }
 #endif
 
   /* initialize console subsystem */
@@ -177,6 +181,7 @@ log_fail:
   /* deinitialize Switch services */
   consoleExit(NULL);
   nifmExit();
+  vfsDeinit();
 #endif
   return 0;
 }
