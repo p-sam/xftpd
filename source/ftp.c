@@ -29,6 +29,7 @@
 #endif
 #include "console.h"
 #include "vfs.h"
+#include "auth.h"
 
 #define POLL_UNKNOWN    (~(POLLIN|POLLPRI|POLLOUT))
 
@@ -170,6 +171,7 @@ struct ftp_session_t
   uint64_t filesize;                     /*! persistent file size between callbacks */
   VfsFile  *fp;                          /*! persistent open file pointer between callbacks */
   VfsDir   *dp;                          /*! persistent open directory pointer between callbacks */
+  AuthSessionStatus auth_status;
 };
 
 /*! ftp command descriptor */
@@ -1250,6 +1252,7 @@ ftp_session_new(int listen_fd)
   }
 
   session->cmd_fd = new_fd;
+  authInit(&session->auth_status);
 
   /* send initiator response */
   ftp_send_response(session, 220, "Hello!\r\n");
@@ -1373,6 +1376,39 @@ ftp_session_connect(ftp_session_t *session)
   }
 
   return 0;
+}
+
+static bool
+ftp_auth_oncommand(ftp_session_t *session, const char *command)
+{
+  if(command && !authCommandNeedsAuth(command))
+    return true;
+
+  return authIsAuthenticated(&session->auth_status);
+}
+
+static void
+ftp_auth_check(ftp_session_t *session, const char *user, const char *pass)
+{
+  if(user)
+    authFillUser(&session->auth_status, user);
+
+  if(pass)
+    authFillPassword(&session->auth_status, pass);
+
+  if(!authIsComplete(&session->auth_status)) {
+    ftp_send_response(session, 331, "Credentials required\r\n");
+    return;
+  }
+
+  if(!authIsAuthenticated(&session->auth_status)) {
+    ftp_session_set_state(session, COMMAND_STATE, CLOSE_PASV | CLOSE_DATA);
+    ftp_send_response(session, 530, "Wrong credentials\r\n");
+    ftp_session_close_cmd(session);
+    return;
+  }
+
+  ftp_send_response(session, 230, "OK\r\n");
 }
 
 /*! read command for ftp session
@@ -1537,7 +1573,7 @@ ftp_session_read_command(ftp_session_t *session,
       session->timestamp = time(NULL);
 
       /* execute the command */
-      if(command == NULL)
+      if(command == NULL || !ftp_auth_oncommand(session, command->name))
       {
         /* send header */
         ftp_send_response(session, 502, "Invalid command \"");
@@ -3421,10 +3457,7 @@ FTP_DECLARE(PASS)
 {
   console_print(CYAN "%s %s\n" RESET, __func__, args ? args : "");
 
-  /* we accept any password */
-  ftp_session_set_state(session, COMMAND_STATE, 0);
-
-  ftp_send_response(session, 230, "OK\r\n");
+  ftp_auth_check(session, NULL, args);
 }
 
 /*! @fn static void PASV(ftp_session_t *session, const char *args)
@@ -4100,8 +4133,5 @@ FTP_DECLARE(USER)
 {
   console_print(CYAN "%s %s\n" RESET, __func__, args ? args : "");
 
-  ftp_session_set_state(session, COMMAND_STATE, 0);
-
-  /* we accept any user name */
-  ftp_send_response(session, 230, "OK\r\n");
+  ftp_auth_check(session, args, NULL);
 }
