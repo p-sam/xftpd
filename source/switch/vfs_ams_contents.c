@@ -25,7 +25,11 @@ bool vfsMapAmsContentsPath(const char* path, VfsPath* out_vpath) {
 		return false;
 	}
 
-	snprintf(out_vpath->mapped, sizeof(out_vpath->mapped), "%s/%s%s", VFS_AMS_CONTENTS_ROOT, tidStr, mappedPath);
+	if(*mappedPath) {
+		snprintf(out_vpath->mapped, sizeof(out_vpath->mapped), "%s/%s/%s", VFS_AMS_CONTENTS_ROOT, tidStr, mappedPath);
+	} else {
+		snprintf(out_vpath->mapped, sizeof(out_vpath->mapped), "%s/%s", VFS_AMS_CONTENTS_ROOT, tidStr);
+	}
 	out_vpath->type = VfsPathType_Physical;
 
 	return true;
