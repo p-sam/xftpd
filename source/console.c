@@ -225,7 +225,11 @@ console_render(void)
   gfxSwapBuffers();
 #endif
 #ifdef __SWITCH__
-  consoleUpdate(NULL);
+  static u64 i = 0;
+  if((i % 20) == 0) {
+    consoleUpdate(NULL);
+  }
+  i++;
 #endif
 }
 

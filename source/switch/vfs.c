@@ -7,6 +7,8 @@
 #include "switch/vfs_savedata.h"
 #include "switch/vfs_sdcard.h"
 
+u32 __nx_fs_num_sessions = 5;
+
 void vfsPathMap(const char* path, VfsPath* out_vpath) {
 	if(*path != '/') {
 		out_vpath->type = VfsPathType_Invalid;
@@ -252,6 +254,7 @@ bool vfsInit() {
 }
 
 void vfsDeinit() {
+	fsSetPriority(FsPriority_Normal);
 	accountExit();
 	nsExit();
 	savedataDeinit();
