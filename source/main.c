@@ -55,13 +55,13 @@ loop(loop_status_t (*callback)(void))
  *  @returns loop status
  */
 static loop_status_t
-wait_for_b(void)
+wait_for_any(void)
 {
   /* update button state */
   hidScanInput();
 
   /* check if B was pressed */
-  if(hidKeysDown() & KEY_B)
+  if(hidKeysDown())
     return LOOP_EXIT;
 
   /* B was not pressed */
@@ -73,13 +73,14 @@ wait_for_b(void)
  *  @returns loop status
  */
 static loop_status_t
-wait_for_b(void)
+wait_for_any(void)
 {
   /* update button state */
   hidScanInput();
 
+  u64 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
   /* check if B was pressed */
-  if(hidKeysDown(CONTROLLER_P1_AUTO) & KEY_B)
+  if(keysDown)
     return LOOP_EXIT;
 
   /* B was not pressed */
@@ -160,7 +161,7 @@ main(int  argc,
   }
 
 #if defined(_3DS) || defined(__SWITCH__)
-  console_print("Press B to exit\n");
+  console_print("Press anything to exit\n");
 #endif
 
 #ifdef ENABLE_LOGGING
@@ -170,13 +171,13 @@ log_fail:
 #endif
 
 #ifdef _3DS
-  loop(wait_for_b);
+  loop(wait_for_any);
 
   /* deinitialize 3DS services */
   gfxExit();
   acExit();
 #elif defined(__SWITCH__)
-  loop(wait_for_b);
+  loop(wait_for_any);
 
   /* deinitialize Switch services */
   consoleExit(NULL);

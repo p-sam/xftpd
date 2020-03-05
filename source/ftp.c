@@ -2191,9 +2191,9 @@ ftp_loop(void)
 #elif defined(__SWITCH__)
   /* check if the user wants to exit */
   hidScanInput();
-  u32 down = hidKeysDown(CONTROLLER_P1_AUTO);
 
-  if(down & KEY_B)
+  u64 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+  if((keysDown & KEY_B) || (keysDown & KEY_PLUS))
     return LOOP_EXIT;
 #endif
 
