@@ -247,7 +247,7 @@ bool vfsInit() {
 	if(R_FAILED(nsInitialize())) {
 		return false;
 	}
-	if(R_FAILED(accountInitialize(AccountServiceType_Application))) {
+	if(R_FAILED(accountInitialize(appletGetAppletType() == AppletType_Application ? AccountServiceType_Application : AccountServiceType_System))) {
 		return false;
 	}
 	return savedataInit();
