@@ -1,5 +1,7 @@
 # ftpd
 
+[![Build](https://github.com/p-sam/xftpd/workflows/Build/badge.svg?branch=develop)](https://github.com/p-sam/xftpd/actions?query=workflow%3ABuild)
+
 FTP Server for 3DS/Switch/Linux.
 
 ## Features
