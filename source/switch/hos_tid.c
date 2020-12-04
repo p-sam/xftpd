@@ -74,6 +74,7 @@ HosTid g_hos_tids[] = {
 	{0x010000000000003F, "module_dt"},
 	{0x0100000000000040, "module_nd"},
 	{0x0100000000000041, "module_ngct"},
+	{0x0100000000000042, "module_pgl"},
 
 	{0x0100000000000800, "archive_CertStore"},
 	{0x0100000000000801, "archive_ErrorMessage"},
