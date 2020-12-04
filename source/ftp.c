@@ -1609,7 +1609,10 @@ ftp_session_read_command(ftp_session_t *session,
         /* only some commands are available during data transfer */
         if(strcasecmp(command->name, "ABOR") != 0
         && strcasecmp(command->name, "STAT") != 0
-        && strcasecmp(command->name, "QUIT") != 0)
+        && strcasecmp(command->name, "QUIT") != 0
+        && strcasecmp(command->name, "PWD") != 0
+        && strcasecmp(command->name, "XPWD") != 0
+        && strcasecmp(command->name, "NOOP") != 0)
         {
           ftp_send_response(session, 503, "Invalid command during transfer\r\n");
           ftp_session_set_state(session, COMMAND_STATE, CLOSE_PASV | CLOSE_DATA);
@@ -3567,7 +3570,7 @@ FTP_DECLARE(PASV)
       *p = ',';
   }
 
-  ftp_send_response(session, 227, "%s\r\n", buffer);
+  ftp_send_response(session, 227, "Entering Passive Mode (%s)\r\n", buffer);
 }
 
 /*! @fn static void PORT(ftp_session_t *session, const char *args)
